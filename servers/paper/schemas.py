@@ -1,10 +1,20 @@
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from shared.responses import BaseResponse
 
 PaperProvider = Literal["auto", "arxiv", "crossref", "openalex"]
+PaperTrendProvider = Literal["auto", "openalex", "arxiv", "huggingface", "modelscope"]
+PaperTrendSort = Literal[
+    "trending",
+    "recent",
+    "citations",
+    "downloads",
+    "likes",
+    "updated",
+    "growth",
+]
 PaperIdentifierType = Literal["auto", "doi", "arxiv_id", "url", "local_path"]
 
 
@@ -64,6 +74,66 @@ class PaperMetadataRequest(BaseModel):
         return value.strip().lower()
 
 
+class TrendingPapersRequest(BaseModel):
+    query: str = Field(default="large language model", min_length=1)
+    max_results: int = Field(default=10, ge=1, le=25)
+    provider: PaperTrendProvider = "auto"
+    sort: PaperTrendSort = "trending"
+    period: str | None = None
+    days: int = Field(default=30, ge=1, le=3650)
+
+    @field_validator("query")
+    @classmethod
+    def validate_query(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("query must not be empty")
+        return stripped
+
+    @field_validator("provider", "sort", mode="before")
+    @classmethod
+    def normalize_literal(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        return value.strip().lower()
+
+    @field_validator("period")
+    @classmethod
+    def normalize_period(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip().lower().replace(" ", "").replace("_", "").replace("-", "")
+        return stripped or None
+
+    @model_validator(mode="after")
+    def resolve_period(self) -> "TrendingPapersRequest":
+        if self.period is None:
+            return self
+        aliases = {
+            "today": 1,
+            "day": 1,
+            "1d": 1,
+            "week": 7,
+            "1week": 7,
+            "7d": 7,
+            "10d": 10,
+            "10days": 10,
+            "14d": 14,
+            "14days": 14,
+            "2weeks": 14,
+            "month": 30,
+            "1month": 30,
+            "30d": 30,
+        }
+        if self.period in aliases:
+            self.days = aliases[self.period]
+            return self
+        if self.period.endswith("d") and self.period[:-1].isdigit():
+            self.days = int(self.period[:-1])
+            return self
+        raise ValueError("period must be one of today, week, 10d, 14d, month, or Nd")
+
+
 class PaperReadRequest(PaperMetadataRequest):
     max_chars: int = Field(default=20000, ge=1, le=500000)
     offset: int = Field(default=0, ge=0)
@@ -114,10 +184,28 @@ class PaperResult(BaseModel):
     source: str
 
 
+class TrendingPaperResult(PaperResult):
+    rank: int
+    score: float | None = None
+    signals: dict[str, Any] = Field(default_factory=dict)
+    related_model_id: str | None = None
+    related_model_url: str | None = None
+
+
 class PaperSearchResponse(BaseResponse):
     query: str
     provider: PaperProvider
     results: list[PaperResult]
+    total_results: int
+
+
+class TrendingPapersResponse(BaseResponse):
+    query: str
+    provider: PaperTrendProvider
+    sort: PaperTrendSort
+    period: str | None = None
+    days: int
+    results: list[TrendingPaperResult]
     total_results: int
 
 

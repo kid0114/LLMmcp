@@ -44,17 +44,40 @@
 
 - paper_search MCP
   - search_papers
+  - trending_papers
   - get_paper_metadata
   - resolve_paper_identifier
   - 目标支持 arXiv / Semantic Scholar / Crossref / OpenAlex
   - 查询条件支持 keyword、author、title、doi、arxiv_id、year_range、venue、领域标签
+  - trending 查询支持 period / days，例如 today、week、10d、14d、month
+  - trending 排序支持前 N 热度（例如 top 10 / top 14）、近期高引、近窗口增长近似排序
   - 返回结构化字段：title、authors、abstract、year、venue、doi、arxiv_id、url、pdf_url、citation_count、source
   - 结果去重：优先 DOI，其次 arXiv ID，其次标题归一化
   - provider 目标使用 async HTTP，外部 API 失败时返回分 provider 错误
   - 已实现：arXiv / Crossref / OpenAlex 首版同步 HTTP 检索
+  - 已实现：OpenAlex 近期高引 / arXiv 近期提交 / Hugging Face 和 ModelScope 论文页热度信号的 trending_papers
+  - 已实现：paper MCP 的 Hugging Face provider 复用 huggingface MCP 内部查询逻辑
+  - 已实现：ModelScope paper 从 arXiv URL 推导 arxiv_id / pdf_url，并纳入 ImpactScore / 阅读 / 收藏信号计分
+  - Google Scholar 无稳定公开 API，暂不作为默认 provider
+  - 待补：窄查询的 soft match / relaxed query 回退，避免多关键词严格匹配直接 0 结果
+  - 待补：provider=auto 并发查询、单 provider timeout、短期缓存
   - 待补：async HTTP provider
   - 待补：Semantic Scholar API key 配置
   - 待补：OpenAI-style tools 导出
+- modelscope MCP
+  - modelscope_trending_resources
+  - 当前支持 skill / dataset / model / paper
+  - period / days 支持 today、week、10d、14d、month
+  - skill / dataset / model 走 openapi/v1
+  - paper 走 api/v1/papers
+  - 待补：MCP 广场真实数据接口定位后纳入 resource_type=mcp
+- huggingface MCP
+  - huggingface_trending_resources
+  - 当前支持 paper / model / dataset
+  - period / days 支持 today、week、10d、14d、month
+  - paper 走 api/papers
+  - model 走 api/models
+  - dataset 走 api/datasets
 - paper_reader MCP
   - read_paper
   - read_paper_sections

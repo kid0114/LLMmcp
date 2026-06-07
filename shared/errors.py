@@ -30,5 +30,13 @@ class PaperError(MCPToolError):
     """Raised when paper search or reading fails."""
 
 
+class ModelScopeError(MCPToolError):
+    """Raised when ModelScope resource search fails."""
+
+
+class HuggingFaceError(MCPToolError):
+    """Raised when Hugging Face resource search fails."""
+
+
 class PermissionDeniedError(MCPToolError):
     """Raised when a URL is blocked by permission policy."""

@@ -97,6 +97,26 @@
         "LOG_LEVEL": "INFO",
         "LOCAL_FILE_ROOT": "/Users/lny/PycharmProjects/LLMmcp"
       }
+    },
+    "llmmcp-modelscope": {
+      "command": "/opt/homebrew/Caskroom/miniconda/base/envs/mcp-llm/bin/python",
+      "args": ["scripts/run_modelscope.py"],
+      "cwd": "/Users/lny/PycharmProjects/LLMmcp",
+      "env": {
+        "PYTHONPATH": "/Users/lny/PycharmProjects/LLMmcp",
+        "ENVIRONMENT": "development",
+        "LOG_LEVEL": "INFO"
+      }
+    },
+    "llmmcp-huggingface": {
+      "command": "/opt/homebrew/Caskroom/miniconda/base/envs/mcp-llm/bin/python",
+      "args": ["scripts/run_huggingface.py"],
+      "cwd": "/Users/lny/PycharmProjects/LLMmcp",
+      "env": {
+        "PYTHONPATH": "/Users/lny/PycharmProjects/LLMmcp",
+        "ENVIRONMENT": "development",
+        "LOG_LEVEL": "INFO"
+      }
     }
   }
 }

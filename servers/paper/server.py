@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import tempfile
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 from urllib.parse import urlparse
@@ -10,6 +11,9 @@ from xml.etree import ElementTree
 from httpx import Client, HTTPError, Timeout
 from mcp.server.fastmcp import FastMCP
 
+from servers.huggingface.schemas import HuggingFaceSort
+from servers.huggingface.server import query_huggingface_papers
+from servers.modelscope.server import modelscope_trending_resources
 from servers.paper.schemas import (
     PaperCitationsResponse,
     PaperCompareRequest,
@@ -28,6 +32,11 @@ from servers.paper.schemas import (
     PaperSectionsResponse,
     PaperSummarizeRequest,
     PaperSummaryResponse,
+    PaperTrendProvider,
+    PaperTrendSort,
+    TrendingPaperResult,
+    TrendingPapersRequest,
+    TrendingPapersResponse,
 )
 from shared.errors import PaperError
 from shared.logging import get_logger
@@ -351,6 +360,338 @@ def _search_provider(request: PaperSearchRequest) -> list[PaperResult]:
     return deduped[: request.max_results]
 
 
+def _date_days_ago(days: int) -> str:
+    return (datetime.now(UTC) - timedelta(days=days)).date().isoformat()
+
+
+def _arxiv_date_range(days: int) -> str:
+    start = (datetime.now(UTC) - timedelta(days=days)).strftime("%Y%m%d0000")
+    end = datetime.now(UTC).strftime("%Y%m%d2359")
+    return f"submittedDate:[{start} TO {end}]"
+
+
+def _score_from_signals(signals: dict[str, Any]) -> float:
+    score = 0.0
+    if isinstance(signals.get("likes"), int | float):
+        score += float(signals["likes"]) * 20.0
+    elif isinstance(signals.get("trending_score"), int | float):
+        score += float(signals["trending_score"]) * 20.0
+    for key, weight in (
+        ("citation_count", 10.0),
+        ("downloads", 1.0),
+        ("impact_score", 1.0),
+        ("favorite_count", 10.0),
+        ("view_count", 0.1),
+    ):
+        value = signals.get(key)
+        if isinstance(value, int | float):
+            score += float(value) * weight
+    return score
+
+
+def _rank_trending_results(results: list[TrendingPaperResult]) -> list[TrendingPaperResult]:
+    ranked = sorted(
+        results,
+        key=lambda result: (
+            result.score if result.score is not None else _score_from_signals(result.signals),
+            result.year or 0,
+        ),
+        reverse=True,
+    )
+    for index, result in enumerate(ranked, start=1):
+        result.rank = index
+    return ranked
+
+
+def _trending_from_paper(
+    result: PaperResult, rank: int, signals: dict[str, Any]
+) -> TrendingPaperResult:
+    return TrendingPaperResult(
+        rank=rank,
+        title=result.title,
+        authors=result.authors,
+        abstract=result.abstract,
+        year=result.year,
+        venue=result.venue,
+        doi=result.doi,
+        arxiv_id=result.arxiv_id,
+        url=result.url,
+        pdf_url=result.pdf_url,
+        citation_count=result.citation_count,
+        source=result.source,
+        score=_score_from_signals(signals),
+        signals=signals,
+    )
+
+
+def _openalex_trending_sort(sort: PaperTrendSort) -> str:
+    if sort in {"recent", "updated", "growth"}:
+        return "publication_date:desc"
+    return "cited_by_count:desc"
+
+
+def _trending_openalex(request: TrendingPapersRequest) -> list[TrendingPaperResult]:
+    params: dict[str, Any] = {
+        "search": request.query,
+        "per-page": request.max_results,
+        "sort": _openalex_trending_sort(request.sort),
+        "filter": f"from_publication_date:{_date_days_ago(request.days)}",
+    }
+    try:
+        with _http_client() as client:
+            response = client.get(OPENALEX_WORKS_BASE, params=params)
+            response.raise_for_status()
+    except HTTPError as exc:
+        raise PaperError(f"OpenAlex trending request failed: {exc}") from exc
+
+    payload = _require_json(response)
+    items = payload.get("results") or []
+    results: list[TrendingPaperResult] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        paper = _openalex_item_to_result(item)
+        signals = {
+            "citation_count": paper.citation_count,
+            "publication_year": paper.year,
+            "days": request.days,
+            "sort_source": "openalex_cited_by_count"
+            if request.sort not in {"recent", "updated", "growth"}
+            else "openalex_publication_date",
+        }
+        results.append(_trending_from_paper(paper, len(results) + 1, signals))
+    if request.sort == "growth":
+        return _rank_trending_results(results)[: request.max_results]
+    return results[: request.max_results]
+
+
+def _trending_arxiv(request: TrendingPapersRequest) -> list[TrendingPaperResult]:
+    query = f"all:{request.query} AND {_arxiv_date_range(request.days)}"
+    params: dict[str, str | int] = {
+        "search_query": query,
+        "start": 0,
+        "max_results": request.max_results,
+        "sortBy": "submittedDate",
+        "sortOrder": "descending",
+    }
+    try:
+        with _http_client() as client:
+            response = client.get(ARXIV_API_BASE, params=params)
+            response.raise_for_status()
+    except HTTPError as exc:
+        raise PaperError(f"arXiv trending request failed: {exc}") from exc
+
+    try:
+        root = ElementTree.fromstring(response.text)
+    except ElementTree.ParseError as exc:
+        raise PaperError(f"Failed to parse arXiv trending response: {exc}") from exc
+    namespace = "{http://www.w3.org/2005/Atom}"
+    papers: list[PaperResult] = []
+    for entry in root.findall(f"{namespace}entry"):
+        title = _text_from_arxiv_node(entry, "title") or ""
+        arxiv_id = _arxiv_id_from_entry(entry)
+        authors: list[str] = []
+        for author in entry.findall(f"{namespace}author"):
+            name_node = author.find(f"{namespace}name")
+            if name_node is not None and name_node.text:
+                authors.append(name_node.text.strip())
+        pdf_url = None
+        for link in entry.findall(f"{namespace}link"):
+            if link.attrib.get("title") == "pdf" or link.attrib.get("type") == "application/pdf":
+                pdf_url = link.attrib.get("href")
+                break
+        if not pdf_url and arxiv_id:
+            pdf_url = f"https://arxiv.org/pdf/{arxiv_id}"
+        papers.append(
+            PaperResult(
+                title=title,
+                authors=authors,
+                abstract=_text_from_arxiv_node(entry, "summary"),
+                year=_parse_year(_text_from_arxiv_node(entry, "published")),
+                venue="arXiv",
+                arxiv_id=arxiv_id,
+                url=f"https://arxiv.org/abs/{arxiv_id}" if arxiv_id else None,
+                pdf_url=pdf_url,
+                source="arxiv",
+            )
+        )
+    return [
+        _trending_from_paper(
+            paper,
+            rank=index,
+            signals={"sort_source": "arxiv_submitted_date", "days": request.days},
+        )
+        for index, paper in enumerate(_dedupe_results(papers), start=1)
+    ][: request.max_results]
+
+
+def _openalex_item_to_result(item: dict[str, Any]) -> PaperResult:
+    primary_location = item.get("primary_location") or {}
+    source = primary_location.get("source") or {}
+    open_access = item.get("open_access") or {}
+    doi = item.get("doi")
+    if isinstance(doi, str) and doi.startswith("https://doi.org/"):
+        doi = doi.removeprefix("https://doi.org/")
+    authorships = item.get("authorships") or []
+    authors = [
+        (authorship.get("author") or {}).get("display_name")
+        for authorship in authorships
+        if isinstance(authorship, dict)
+    ]
+    return PaperResult(
+        title=item.get("title") or item.get("display_name") or "",
+        authors=[author for author in authors if author],
+        abstract=None,
+        year=item.get("publication_year"),
+        venue=source.get("display_name"),
+        doi=doi,
+        url=item.get("doi") or item.get("id"),
+        pdf_url=open_access.get("oa_url"),
+        citation_count=item.get("cited_by_count"),
+        source="openalex",
+    )
+
+
+def _huggingface_sort(sort: PaperTrendSort) -> HuggingFaceSort:
+    if sort == "likes":
+        return "likes"
+    if sort in {"recent", "updated", "trending", "growth", "downloads"}:
+        return sort
+    return "trending"
+
+
+def _arxiv_id_from_url(value: str | None) -> str | None:
+    if not value:
+        return None
+    match = re.search(r"arxiv\.org/(?:abs|pdf)/([^/?#]+)", value, re.I)
+    if not match:
+        return None
+    return _normalize_arxiv_id(match.group(1).removesuffix(".pdf"))
+
+
+def _resource_to_trending_paper(
+    resource: Any,
+    provider: str,
+    venue: str,
+    sort_source: str,
+    days: int,
+) -> TrendingPaperResult:
+    paper_id = str(resource.id)
+    arxiv_id = paper_id if re.match(r"^\d{4}\.\d{4,5}(v\d+)?$", paper_id) else None
+    arxiv_id = arxiv_id or _arxiv_id_from_url(getattr(resource, "url", None))
+    pdf_url = f"https://arxiv.org/pdf/{arxiv_id}" if arxiv_id else None
+    impact_score = getattr(resource, "impact_score", None)
+    signals = {
+        "downloads": getattr(resource, "downloads", None),
+        "likes": getattr(resource, "likes", None),
+        "view_count": getattr(resource, "view_count", None),
+        "favorite_count": getattr(resource, "favorite_count", None),
+        "impact_score": impact_score,
+        "trending_score": getattr(resource, "trending_score", None),
+        "citation_count": impact_score,
+        "created_at": getattr(resource, "created_at", None),
+        "updated_at": getattr(resource, "updated_at", None),
+        "days": days,
+        "sort_source": sort_source,
+    }
+    published_at = getattr(resource, "updated_at", None) or getattr(resource, "created_at", None)
+    return TrendingPaperResult(
+        rank=resource.rank,
+        title=resource.title,
+        authors=getattr(resource, "authors", []),
+        abstract=getattr(resource, "description", None),
+        year=_parse_year(published_at),
+        venue=venue,
+        arxiv_id=arxiv_id,
+        url=resource.url,
+        pdf_url=pdf_url,
+        citation_count=impact_score,
+        source=provider,
+        score=_score_from_signals(signals),
+        signals=signals,
+    )
+
+
+def _trending_huggingface(request: TrendingPapersRequest) -> list[TrendingPaperResult]:
+    response = query_huggingface_papers(
+        query=request.query,
+        max_results=request.max_results,
+        sort=_huggingface_sort(request.sort),
+        period=request.period,
+        days=request.days,
+    )
+    return [
+        _resource_to_trending_paper(
+            resource,
+            provider="huggingface",
+            venue="Hugging Face Papers",
+            sort_source=f"huggingface_{response.sort}",
+            days=response.days,
+        )
+        for resource in response.results
+    ]
+
+
+def _modelscope_sort(sort: PaperTrendSort) -> str:
+    if sort == "likes":
+        return "favorites"
+    if sort == "citations":
+        return "impact"
+    if sort in {"recent", "updated", "trending", "growth", "downloads"}:
+        return sort
+    return "views"
+
+
+def _trending_modelscope(request: TrendingPapersRequest) -> list[TrendingPaperResult]:
+    response = modelscope_trending_resources(
+        resource_type="paper",
+        query=request.query,
+        max_results=request.max_results,
+        sort=_modelscope_sort(request.sort),
+        period=request.period,
+        days=request.days,
+    )
+    return [
+        _resource_to_trending_paper(
+            resource,
+            provider="modelscope",
+            venue="ModelScope",
+            sort_source=f"modelscope_{response.sort}",
+            days=response.days,
+        )
+        for resource in response.results
+    ]
+
+
+def _trending_provider(request: TrendingPapersRequest) -> list[TrendingPaperResult]:
+    if request.provider == "openalex":
+        return _trending_openalex(request)
+    if request.provider == "arxiv":
+        return _trending_arxiv(request)
+    if request.provider == "huggingface":
+        return _trending_huggingface(request)
+    if request.provider == "modelscope":
+        return _trending_modelscope(request)
+
+    results: list[TrendingPaperResult] = []
+    errors: list[str] = []
+    for provider, searcher in (
+        ("openalex", _trending_openalex),
+        ("arxiv", _trending_arxiv),
+        ("huggingface", _trending_huggingface),
+        ("modelscope", _trending_modelscope),
+    ):
+        try:
+            results.extend(searcher(request))
+        except PaperError as exc:
+            errors.append(f"{provider}: {exc}")
+    deduped = _dedupe_results(cast(list[PaperResult], results))
+    ranked = _rank_trending_results(cast(list[TrendingPaperResult], deduped))
+    if not ranked and errors:
+        raise PaperError("All paper trend providers failed: " + "; ".join(errors))
+    return ranked[: request.max_results]
+
+
 def _metadata_by_doi(doi: str) -> PaperResult | None:
     request = PaperSearchRequest(query=doi, doi=doi, provider="crossref", max_results=1)
     results = _search_crossref(request)
@@ -535,6 +876,40 @@ def search_papers(
         message="Searched papers successfully",
         query=request.query,
         provider=request.provider,
+        results=results,
+        total_results=len(results),
+    )
+
+
+@mcp.tool()
+def trending_papers(
+    query: str = "large language model",
+    max_results: int = 10,
+    provider: str = "auto",
+    sort: str = "trending",
+    period: str | None = None,
+    days: int = 30,
+) -> TrendingPapersResponse:
+    request = TrendingPapersRequest(
+        query=query,
+        max_results=max_results,
+        provider=cast(PaperTrendProvider, provider),
+        sort=cast(PaperTrendSort, sort),
+        period=period,
+        days=days,
+    )
+    results = _trending_provider(request)
+    logger.info(
+        "trending_papers called",
+        extra={"query": request.query, "provider": request.provider, "sort": request.sort},
+    )
+    return TrendingPapersResponse(
+        message=f"Returned {len(results)} trending paper or model-linked results",
+        query=request.query,
+        provider=request.provider,
+        sort=request.sort,
+        period=request.period,
+        days=request.days,
         results=results,
         total_results=len(results),
     )

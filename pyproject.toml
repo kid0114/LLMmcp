@@ -43,6 +43,8 @@ packages = [
   "servers.file_reader",
   "servers.video",
   "servers.paper",
+  "servers.modelscope",
+  "servers.huggingface",
   "shared",
 ]
 

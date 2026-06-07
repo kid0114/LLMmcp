@@ -2,14 +2,21 @@ from pathlib import Path
 
 import pytest
 
-from servers.paper.schemas import PaperResult
+from servers.huggingface.schemas import HuggingFaceResourceResult, HuggingFaceTrendingResponse
+from servers.modelscope.schemas import ModelScopeResourceResult
+from servers.paper.schemas import PaperResult, TrendingPaperResult
 from servers.paper.server import (
     _detect_identifier_type,
+    _huggingface_sort,
+    _modelscope_sort,
     _normalize_arxiv_id,
+    _resource_to_trending_paper,
+    _score_from_signals,
     _split_sections,
     read_paper,
     resolve_paper_identifier,
     search_papers,
+    trending_papers,
 )
 from shared.settings import get_settings
 
@@ -56,6 +63,85 @@ def test_search_papers_uses_selected_provider(monkeypatch: pytest.MonkeyPatch) -
 
     assert response.total_results == 1
     assert response.results[0].source == "arxiv"
+
+
+def test_trending_papers_uses_selected_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "servers.paper.server.query_huggingface_papers",
+        lambda **kwargs: HuggingFaceTrendingResponse(
+            message="ok",
+            resource_type="paper",
+            query=kwargs["query"],
+            sort=kwargs["sort"],
+            period=kwargs["period"],
+            days=14,
+            total_results=1,
+            results=[
+                HuggingFaceResourceResult(
+                    rank=1,
+                    resource_type="paper",
+                    id="1234.5678",
+                    title="A Paper",
+                    authors=["org"],
+                    url="https://huggingface.co/papers/1234.5678",
+                    updated_at="2026-06-01T00:00:00.000Z",
+                )
+            ],
+        ),
+    )
+
+    response = trending_papers("llm", provider="huggingface", sort="growth", period="14d")
+
+    assert response.provider == "huggingface"
+    assert response.sort == "growth"
+    assert response.period == "14d"
+    assert response.days == 14
+    assert response.total_results == 1
+    assert response.results[0].source == "huggingface"
+
+
+def test_model_hub_sort_mappings() -> None:
+    assert _huggingface_sort("likes") == "likes"
+    assert _huggingface_sort("downloads") == "downloads"
+    assert _huggingface_sort("trending") == "trending"
+    assert _huggingface_sort("growth") == "growth"
+    assert _modelscope_sort("likes") == "favorites"
+    assert _modelscope_sort("downloads") == "downloads"
+    assert _modelscope_sort("citations") == "impact"
+    assert _modelscope_sort("trending") == "trending"
+    assert _modelscope_sort("growth") == "growth"
+
+
+def test_modelscope_paper_conversion_derives_arxiv_metadata_and_score() -> None:
+    paper = _resource_to_trending_paper(
+        ModelScopeResourceResult(
+            rank=1,
+            resource_type="paper",
+            id="123",
+            title="ModelScope Paper",
+            url="https://arxiv.org/abs/2606.06390",
+            impact_score=480,
+            view_count=20,
+            favorite_count=2,
+            updated_at="2026-06-01T00:00:00Z",
+        ),
+        provider="modelscope",
+        venue="ModelScope",
+        sort_source="modelscope_trending",
+        days=7,
+    )
+
+    assert paper.arxiv_id == "2606.06390"
+    assert paper.pdf_url == "https://arxiv.org/pdf/2606.06390"
+    assert paper.citation_count == 480
+    assert paper.score is not None
+    assert paper.score > 0
+    assert paper.signals["citation_count"] == 480
+
+
+def test_score_from_signals_uses_source_specific_metrics_without_double_counting() -> None:
+    assert _score_from_signals({"likes": 10, "trending_score": 100}) == 200
+    assert _score_from_signals({"impact_score": 480, "favorite_count": 2, "view_count": 20}) == 502
 
 
 def test_resolve_paper_identifier_uses_arxiv(monkeypatch: pytest.MonkeyPatch) -> None:

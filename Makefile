@@ -40,5 +40,11 @@ run-video:
 run-paper:
 	$(PYTHON) scripts/run_paper.py
 
+run-modelscope:
+	$(PYTHON) scripts/run_modelscope.py
+
+run-huggingface:
+	$(PYTHON) scripts/run_huggingface.py
+
 health:
 	$(PYTHON) scripts/health_check.py
