@@ -4,7 +4,14 @@ from types import SimpleNamespace
 import pytest
 from PIL import Image
 
-from servers.file_reader.server import inspect_image_file, ocr_image_file, read_pdf_file
+from servers.file_reader.server import (
+    classify_readable_file,
+    inspect_image_file,
+    ocr_image_file,
+    read_mixed_text_file,
+    read_pdf_file,
+    read_text_file,
+)
 from shared.errors import FileReaderError
 from shared.settings import get_settings
 
@@ -28,6 +35,75 @@ def test_inspect_image_file_returns_metadata(
     assert response.width == 16
     assert response.height == 8
     assert response.has_alpha is True
+
+
+def test_classify_readable_file_detects_text_code(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _set_local_root(monkeypatch, tmp_path)
+    (tmp_path / "app.py").write_text("def main():\n    pass\n", encoding="utf-8")
+
+    response = classify_readable_file("app.py")
+
+    assert response.category == "text"
+    assert response.readable is True
+    assert response.reader == "read_text_file"
+    assert response.text_kind == "python"
+
+
+def test_classify_readable_file_detects_mixed_markdown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _set_local_root(monkeypatch, tmp_path)
+    (tmp_path / "README.md").write_text("# Title\n\n![img](a.png)\n", encoding="utf-8")
+
+    response = classify_readable_file("README.md")
+
+    assert response.category == "mixed"
+    assert response.reader == "read_mixed_text_file"
+    assert response.text_kind == "markdown"
+    assert response.mixed_kind == "markdown"
+
+
+def test_read_text_file_reads_plain_text(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _set_local_root(monkeypatch, tmp_path)
+    (tmp_path / "notes.txt").write_text("abcdef", encoding="utf-8")
+
+    response = read_text_file("notes.txt", max_chars=3, offset=2)
+
+    assert response.category == "text"
+    assert response.content == "cde"
+    assert response.truncated is True
+
+
+def test_read_mixed_text_file_extracts_html_text(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _set_local_root(monkeypatch, tmp_path)
+    (tmp_path / "page.html").write_text(
+        "<html><body><h1>Title</h1><script>ignore()</script><p>Body</p></body></html>",
+        encoding="utf-8",
+    )
+
+    response = read_mixed_text_file("page.html")
+
+    assert response.category == "mixed"
+    assert response.mixed_kind == "html"
+    assert "Title" in response.content
+    assert "Body" in response.content
+    assert "ignore" not in response.content
+
+
+def test_read_text_file_rejects_binary_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _set_local_root(monkeypatch, tmp_path)
+    (tmp_path / "data.bin").write_bytes(b"\x00\x01\x02")
+
+    with pytest.raises(FileReaderError, match="classified as binary"):
+        read_text_file("data.bin")
 
 
 def test_read_pdf_file_uses_pypdf_reader(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

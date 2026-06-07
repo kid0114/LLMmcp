@@ -20,6 +20,15 @@ class PdfReadRequest(FileReaderPathRequest):
     max_pages: int = Field(default=20, ge=1, le=500)
 
 
+class TextReadRequest(FileReaderPathRequest):
+    max_chars: int = Field(default=20000, ge=1, le=500000)
+    offset: int = Field(default=0, ge=0)
+
+
+class MixedTextReadRequest(TextReadRequest):
+    pass
+
+
 class ImageMetadataRequest(FileReaderPathRequest):
     pass
 
@@ -44,6 +53,33 @@ class PdfReadResponse(BaseResponse):
     pages_read: int
     content: str
     content_length: int
+    truncated: bool = False
+
+
+class FileClassificationResponse(BaseResponse):
+    path: str
+    absolute_path: str
+    extension: str
+    media_type: str | None = None
+    size: int
+    category: str
+    readable: bool
+    reader: str | None = None
+    text_kind: str | None = None
+    mixed_kind: str | None = None
+    notes: list[str] = Field(default_factory=list)
+
+
+class TextReadResponse(BaseResponse):
+    path: str
+    absolute_path: str
+    category: str
+    text_kind: str | None = None
+    mixed_kind: str | None = None
+    content: str
+    content_length: int
+    offset: int = 0
+    bytes_size: int
     truncated: bool = False
 
 
