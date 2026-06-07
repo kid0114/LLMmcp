@@ -1,0 +1,102 @@
+{
+  "mcpServers": {
+    "llmmcp-search": {
+      "command": "/opt/homebrew/Caskroom/miniconda/base/envs/mcp-llm/bin/python",
+      "args": ["scripts/run_search.py"],
+      "cwd": "/Users/lny/PycharmProjects/LLMmcp",
+      "env": {
+        "PYTHONPATH": "/Users/lny/PycharmProjects/LLMmcp",
+        "ENVIRONMENT": "development",
+        "LOG_LEVEL": "INFO",
+        "SEARCH_PROVIDER": "auto",
+        "ALLOWLIST_DOMAINS": "[]"
+      }
+    },
+    "llmmcp-fetch": {
+      "command": "/opt/homebrew/Caskroom/miniconda/base/envs/mcp-llm/bin/python",
+      "args": ["scripts/run_fetch.py"],
+      "cwd": "/Users/lny/PycharmProjects/LLMmcp",
+      "env": {
+        "PYTHONPATH": "/Users/lny/PycharmProjects/LLMmcp",
+        "ENVIRONMENT": "development",
+        "LOG_LEVEL": "INFO",
+        "ALLOWLIST_DOMAINS": "[]"
+      }
+    },
+    "llmmcp-browser": {
+      "command": "/opt/homebrew/Caskroom/miniconda/base/envs/mcp-llm/bin/python",
+      "args": ["scripts/run_browser.py"],
+      "cwd": "/Users/lny/PycharmProjects/LLMmcp",
+      "env": {
+        "PYTHONPATH": "/Users/lny/PycharmProjects/LLMmcp",
+        "ENVIRONMENT": "development",
+        "LOG_LEVEL": "INFO",
+        "ALLOWLIST_DOMAINS": "[]"
+      }
+    },
+    "llmmcp-local-file": {
+      "command": "/opt/homebrew/Caskroom/miniconda/base/envs/mcp-llm/bin/python",
+      "args": ["scripts/run_local_file.py"],
+      "cwd": "/Users/lny/PycharmProjects/LLMmcp",
+      "env": {
+        "PYTHONPATH": "/Users/lny/PycharmProjects/LLMmcp",
+        "ENVIRONMENT": "development",
+        "LOG_LEVEL": "INFO",
+        "LOCAL_FILE_ROOT": "/Users/lny/PycharmProjects/LLMmcp"
+      }
+    },
+    "llmmcp-github-search": {
+      "command": "/opt/homebrew/Caskroom/miniconda/base/envs/mcp-llm/bin/python",
+      "args": ["scripts/run_github_search.py"],
+      "cwd": "/Users/lny/PycharmProjects/LLMmcp",
+      "env": {
+        "PYTHONPATH": "/Users/lny/PycharmProjects/LLMmcp",
+        "ENVIRONMENT": "development",
+        "LOG_LEVEL": "INFO",
+        "GITHUB_TOKEN": ""
+      }
+    },
+    "llmmcp-time": {
+      "command": "/opt/homebrew/Caskroom/miniconda/base/envs/mcp-llm/bin/python",
+      "args": ["scripts/run_time.py"],
+      "cwd": "/Users/lny/PycharmProjects/LLMmcp",
+      "env": {
+        "PYTHONPATH": "/Users/lny/PycharmProjects/LLMmcp",
+        "ENVIRONMENT": "development",
+        "LOG_LEVEL": "INFO"
+      }
+    },
+    "llmmcp-file-reader": {
+      "command": "/opt/homebrew/Caskroom/miniconda/base/envs/mcp-llm/bin/python",
+      "args": ["scripts/run_file_reader.py"],
+      "cwd": "/Users/lny/PycharmProjects/LLMmcp",
+      "env": {
+        "PYTHONPATH": "/Users/lny/PycharmProjects/LLMmcp",
+        "ENVIRONMENT": "development",
+        "LOG_LEVEL": "INFO",
+        "LOCAL_FILE_ROOT": "/Users/lny/PycharmProjects/LLMmcp"
+      }
+    },
+    "llmmcp-video": {
+      "command": "/opt/homebrew/Caskroom/miniconda/base/envs/mcp-llm/bin/python",
+      "args": ["scripts/run_video.py"],
+      "cwd": "/Users/lny/PycharmProjects/LLMmcp",
+      "env": {
+        "PYTHONPATH": "/Users/lny/PycharmProjects/LLMmcp",
+        "ENVIRONMENT": "development",
+        "LOG_LEVEL": "INFO"
+      }
+    },
+    "llmmcp-paper": {
+      "command": "/opt/homebrew/Caskroom/miniconda/base/envs/mcp-llm/bin/python",
+      "args": ["scripts/run_paper.py"],
+      "cwd": "/Users/lny/PycharmProjects/LLMmcp",
+      "env": {
+        "PYTHONPATH": "/Users/lny/PycharmProjects/LLMmcp",
+        "ENVIRONMENT": "development",
+        "LOG_LEVEL": "INFO",
+        "LOCAL_FILE_ROOT": "/Users/lny/PycharmProjects/LLMmcp"
+      }
+    }
+  }
+}

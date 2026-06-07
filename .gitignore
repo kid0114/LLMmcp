@@ -1,0 +1,35 @@
+.DS_Store
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Build and packaging output
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+configs/mcp.local.json
+configs/mcp.omlx.json
+
+# IDE metadata
+.idea/
+.vscode/
+
+# Runtime artifacts
+screenshots/
+downloads/
+*.log
