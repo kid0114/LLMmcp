@@ -75,6 +75,11 @@ def _iter_files(root: Path) -> list[Path]:
 
 @mcp.tool()
 def read_local_file(path: str, max_chars: int = 20000, offset: int = 0) -> LocalFileResponse:
+    """Read a local UTF-8 text file within LOCAL_FILE_ROOT.
+
+    Use this tool for local file reads. Do not use resources/read for arbitrary
+    local paths; this server exposes local file access as tools.
+    """
     request = LocalFileRequest(path=path, max_chars=max_chars, offset=offset)
     root = _resolve_local_root()
     target = _resolve_safe_path(request.path, root)
@@ -92,7 +97,7 @@ def read_local_file(path: str, max_chars: int = 20000, offset: int = 0) -> Local
     sliced = content[request.offset : request.offset + request.max_chars]
     truncated = request.offset + len(sliced) < len(content)
 
-    logger.info("read_local_file called", extra={"path": request.path, "root": str(root)})
+    logger.debug("read_local_file called", extra={"path": request.path, "root": str(root)})
     return LocalFileResponse(
         message="Read local file successfully",
         path=request.path,
@@ -107,6 +112,11 @@ def read_local_file(path: str, max_chars: int = 20000, offset: int = 0) -> Local
 
 @mcp.tool()
 def list_local_files(path: str = ".", max_entries: int = 100) -> LocalFileListResponse:
+    """List files and directories within LOCAL_FILE_ROOT.
+
+    Use this tool for directory browsing. Do not use resources/list for local
+    paths; this server exposes local file access as tools.
+    """
     request = LocalListRequest(path=path, max_entries=max_entries)
     root = _resolve_local_root()
     target = _resolve_safe_path(request.path, root)
@@ -118,7 +128,7 @@ def list_local_files(path: str = ".", max_entries: int = 100) -> LocalFileListRe
 
     entries = sorted(target.iterdir(), key=lambda item: (not item.is_dir(), item.name.lower()))
     selected = entries[: request.max_entries]
-    logger.info("list_local_files called", extra={"path": request.path, "root": str(root)})
+    logger.debug("list_local_files called", extra={"path": request.path, "root": str(root)})
     return LocalFileListResponse(
         message="Listed local files successfully",
         path=request.path,
@@ -131,6 +141,11 @@ def list_local_files(path: str = ".", max_entries: int = 100) -> LocalFileListRe
 
 @mcp.tool()
 def stat_local_file(path: str) -> LocalFileStatResponse:
+    """Read metadata for a local path within LOCAL_FILE_ROOT.
+
+    Use this tool for existence, kind, size, and modified time. Do not use
+    resources/read for arbitrary local paths.
+    """
     request = LocalPathRequest(path=path)
     root = _resolve_local_root()
     target = _resolve_safe_path(request.path, root)
@@ -144,7 +159,7 @@ def stat_local_file(path: str) -> LocalFileStatResponse:
         )
 
     kind = "directory" if target.is_dir() else "file" if target.is_file() else "other"
-    logger.info("stat_local_file called", extra={"path": request.path, "root": str(root)})
+    logger.debug("stat_local_file called", extra={"path": request.path, "root": str(root)})
     return LocalFileStatResponse(
         message="Read local path metadata successfully",
         path=request.path,
@@ -160,6 +175,11 @@ def stat_local_file(path: str) -> LocalFileStatResponse:
 def glob_local_files(
     pattern: str, path: str = ".", max_results: int = 100
 ) -> LocalFileGlobResponse:
+    """Find local files by glob pattern within LOCAL_FILE_ROOT.
+
+    Use this tool for file discovery. Do not use resource templates for local
+    path globbing; this server exposes globbing as a tool.
+    """
     request = LocalGlobRequest(path=path, pattern=pattern, max_results=max_results)
     root = _resolve_local_root()
     target = _resolve_safe_path(request.path, root)
@@ -172,7 +192,10 @@ def glob_local_files(
     matches = sorted(target.glob(request.pattern), key=lambda item: item.as_posix())
     safe_matches = [_resolve_safe_path(str(match), root) for match in matches]
     selected = safe_matches[: request.max_results]
-    logger.info("glob_local_files called", extra={"path": request.path, "pattern": request.pattern})
+    logger.debug(
+        "glob_local_files called",
+        extra={"path": request.path, "pattern": request.pattern},
+    )
     return LocalFileGlobResponse(
         message="Matched local files successfully",
         path=request.path,
@@ -191,6 +214,11 @@ def search_local_files(
     max_results: int = 50,
     max_file_chars: int = 200000,
 ) -> LocalFileSearchResponse:
+    """Search text across local files within LOCAL_FILE_ROOT.
+
+    Use this tool for local content search. Do not use resources/read or
+    resource templates for local search; this server exposes search as a tool.
+    """
     request = LocalSearchRequest(
         path=path,
         query=query,
@@ -230,7 +258,7 @@ def search_local_files(
                 if len(results) >= request.max_results:
                     break
 
-    logger.info("search_local_files called", extra={"path": request.path, "query": request.query})
+    logger.debug("search_local_files called", extra={"path": request.path, "query": request.query})
     return LocalFileSearchResponse(
         message="Searched local files successfully",
         path=request.path,

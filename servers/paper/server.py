@@ -855,6 +855,11 @@ def search_papers(
     year_to: int | None = None,
     venue: str | None = None,
 ) -> PaperSearchResponse:
+    """Search scholarly papers by query and optional metadata filters.
+
+    Use this tool for paper discovery. Do not use MCP resources for paper
+    search; this server exposes paper operations as tools.
+    """
     request = PaperSearchRequest(
         query=query,
         max_results=max_results,
@@ -868,7 +873,7 @@ def search_papers(
         venue=venue,
     )
     results = _search_provider(request)
-    logger.info(
+    logger.debug(
         "search_papers called",
         extra={"query": request.query, "provider": request.provider},
     )
@@ -890,6 +895,11 @@ def trending_papers(
     period: str | None = None,
     days: int = 30,
 ) -> TrendingPapersResponse:
+    """Find trending or model-linked papers from supported paper providers.
+
+    Use this tool for trending paper lookups. Do not use MCP resources for paper
+    discovery; this server exposes paper operations as tools.
+    """
     request = TrendingPapersRequest(
         query=query,
         max_results=max_results,
@@ -899,7 +909,7 @@ def trending_papers(
         days=days,
     )
     results = _trending_provider(request)
-    logger.info(
+    logger.debug(
         "trending_papers called",
         extra={"query": request.query, "provider": request.provider, "sort": request.sort},
     )
@@ -919,6 +929,11 @@ def trending_papers(
 def resolve_paper_identifier(
     identifier: str, identifier_type: str = "auto"
 ) -> PaperMetadataResponse:
+    """Resolve DOI, arXiv ID, URL, or local path into paper metadata.
+
+    Use this tool for paper identifier resolution. Do not use MCP resources for
+    paper identifiers; this server exposes paper operations as tools.
+    """
     request = PaperMetadataRequest(
         identifier=identifier,
         identifier_type=cast(PaperIdentifierType, identifier_type),
@@ -939,6 +954,11 @@ def resolve_paper_identifier(
 
 @mcp.tool()
 def get_paper_metadata(identifier: str, identifier_type: str = "auto") -> PaperMetadataResponse:
+    """Get paper metadata for DOI, arXiv ID, URL, or local path.
+
+    Use this tool for paper metadata lookup. Do not use MCP resources for paper
+    metadata; this server exposes paper operations as tools.
+    """
     return cast(
         PaperMetadataResponse,
         resolve_paper_identifier(identifier=identifier, identifier_type=identifier_type),
@@ -953,6 +973,11 @@ def read_paper(
     offset: int = 0,
     max_pages: int = 30,
 ) -> PaperReadResponse:
+    """Read paper content from DOI, arXiv ID, URL, or local PDF path.
+
+    Use this tool for paper text extraction. Do not use resources/read for
+    arbitrary paper URLs or paths; this server exposes paper reading as a tool.
+    """
     request = PaperReadRequest(
         identifier=identifier,
         identifier_type=cast(PaperIdentifierType, identifier_type),
@@ -972,6 +997,11 @@ def read_paper_sections(
     offset: int = 0,
     max_pages: int = 30,
 ) -> PaperSectionsResponse:
+    """Read selected sections from a paper.
+
+    Use this tool for section-level paper reading. Do not use resources/read for
+    paper sections; this server exposes section reading as a tool.
+    """
     request = PaperSectionReadRequest(
         identifier=identifier,
         identifier_type=cast(PaperIdentifierType, identifier_type),
@@ -1002,6 +1032,11 @@ def extract_paper_citations(
     offset: int = 0,
     max_pages: int = 100,
 ) -> PaperCitationsResponse:
+    """Extract citation lines from a paper.
+
+    Use this tool for citation extraction. Do not use MCP resources for paper
+    citations; this server exposes citation extraction as a tool.
+    """
     request = PaperReadRequest(
         identifier=identifier,
         identifier_type=cast(PaperIdentifierType, identifier_type),
@@ -1027,6 +1062,11 @@ def summarize_paper(
     max_pages: int = 30,
     max_points: int = 6,
 ) -> PaperSummaryResponse:
+    """Summarize a paper with lightweight extractive heuristics.
+
+    Use this tool for paper summaries. Do not use MCP resources for paper
+    summarization; this server exposes summarization as a tool.
+    """
     request = PaperSummarizeRequest(
         identifier=identifier,
         identifier_type=cast(PaperIdentifierType, identifier_type),
@@ -1052,6 +1092,11 @@ def compare_papers(
     identifier_type: str = "auto",
     max_chars_per_paper: int = 8000,
 ) -> PaperComparisonResponse:
+    """Compare multiple papers using lightweight term and abstract extraction.
+
+    Use this tool for paper comparison. Do not use MCP resources for paper
+    comparison; this server exposes comparison as a tool.
+    """
     request = PaperCompareRequest(
         identifiers=identifiers,
         identifier_type=cast(PaperIdentifierType, identifier_type),

@@ -126,10 +126,15 @@ def _parse_chinese_relative_delta(value: str) -> timedelta:
 
 @mcp.tool()
 def get_current_time(timezone: str = "UTC") -> TimeResponse:
+    """Get the current time in an IANA timezone.
+
+    Use this tool for current time questions. Do not use MCP resources for time;
+    this server exposes time operations as tools.
+    """
     request = TimezoneRequest(timezone=timezone)
     tz = _timezone(request.timezone)
     current = datetime.now(tz)
-    logger.info("get_current_time called", extra={"timezone": request.timezone})
+    logger.debug("get_current_time called", extra={"timezone": request.timezone})
     return _response_for_datetime(current, request.timezone)
 
 
@@ -137,6 +142,11 @@ def get_current_time(timezone: str = "UTC") -> TimeResponse:
 def convert_time(
     datetime_text: str, from_timezone: str = "UTC", to_timezone: str = "UTC"
 ) -> TimeConvertResponse:
+    """Convert a datetime from one timezone to another.
+
+    Use this tool for timezone conversion. Do not use MCP resources for time;
+    this server exposes time operations as tools.
+    """
     request = TimeConvertRequest(
         datetime_text=datetime_text,
         from_timezone=from_timezone,
@@ -144,7 +154,7 @@ def convert_time(
     )
     parsed = _parse_datetime(request.datetime_text, request.from_timezone)
     converted = parsed.astimezone(_timezone(request.to_timezone))
-    logger.info(
+    logger.debug(
         "convert_time called",
         extra={"from_timezone": request.from_timezone, "to_timezone": request.to_timezone},
     )
@@ -163,6 +173,11 @@ def convert_time(
 def parse_relative_time(
     expression: str, timezone: str = "UTC", base_datetime: str | None = None
 ) -> RelativeTimeResponse:
+    """Parse relative time expressions into concrete datetimes.
+
+    Use this tool for phrases like tomorrow, next week, or 3 hours ago. Do not
+    use MCP resources for time parsing.
+    """
     request = RelativeTimeRequest(
         expression=expression,
         timezone=timezone,
@@ -175,7 +190,7 @@ def parse_relative_time(
         else datetime.now(tz)
     )
     resolved = _parse_relative_expression(request.expression, base)
-    logger.info(
+    logger.debug(
         "parse_relative_time called",
         extra={"expression": request.expression, "timezone": request.timezone},
     )

@@ -41,6 +41,27 @@ def _github_headers() -> dict[str, str]:
     return headers
 
 
+def _github_search_error_message(exc: HTTPError) -> str:
+    response = getattr(exc, "response", None)
+    if response is None:
+        return f"GitHub search request failed: {exc}"
+
+    status_code = getattr(response, "status_code", None)
+    text = getattr(response, "text", "") or ""
+    lowered = text.lower()
+    rate_remaining = response.headers.get("x-ratelimit-remaining")
+    if status_code in {403, 429} and (
+        rate_remaining == "0" or "rate limit" in lowered or "api rate limit exceeded" in lowered
+    ):
+        return (
+            "GitHub API rate limit exceeded. Configure GITHUB_TOKEN to raise the API quota; "
+            "use github_trending_repositories for GitHub Trending because it does not require "
+            "the GitHub Search API. Do not switch to browser_fetch unless the user explicitly "
+            "asks to inspect a specific GitHub page."
+        )
+    return f"GitHub search request failed: {exc}"
+
+
 def _run_github_search(endpoint: str, params: dict[str, Any]) -> list[dict[str, Any]]:
     settings = get_settings()
     url = f"{GITHUB_API_BASE}/{endpoint}"
@@ -50,7 +71,7 @@ def _run_github_search(endpoint: str, params: dict[str, Any]) -> list[dict[str, 
             response = client.get(url, params=params, headers=_github_headers())
             response.raise_for_status()
     except HTTPError as exc:
-        raise GitHubSearchError(f"GitHub search request failed: {exc}") from exc
+        raise GitHubSearchError(_github_search_error_message(exc)) from exc
     except Exception as exc:  # pragma: no cover
         raise GitHubSearchError(f"Unexpected GitHub search failure: {exc}") from exc
 
@@ -253,10 +274,15 @@ def _fetch_trending_repositories(
 def github_search_repositories(
     query: str, max_results: int = 5, sort: str = "best-match"
 ) -> GitHubRepositorySearchResponse:
+    """Search GitHub repositories through the GitHub search API.
+
+    Use this tool for GitHub repository discovery. Do not use MCP resources for
+    GitHub searches; this server exposes GitHub search as tools.
+    """
     request = GitHubSearchRequest(query=query, max_results=max_results, sort=sort)
     items = _run_github_search("repositories", _repository_params(request))
     results = _normalize_repository_results(items)
-    logger.info("github_search_repositories called", extra={"query": request.query})
+    logger.debug("github_search_repositories called", extra={"query": request.query})
     return GitHubRepositorySearchResponse(
         message=f"Returned {len(results)} GitHub repositories",
         query=request.query,
@@ -272,6 +298,11 @@ def github_search_model_repositories(
     sort: str = "stars",
     language: str | None = None,
 ) -> GitHubModelRepositorySearchResponse:
+    """Search GitHub repositories that are likely related to AI/ML models.
+
+    Use this tool for model-code repository discovery. Do not use MCP resources
+    for GitHub searches; this server exposes GitHub search as tools.
+    """
     request = GitHubModelSearchRequest(
         query=query,
         max_results=max_results,
@@ -281,7 +312,7 @@ def github_search_model_repositories(
     resolved_query = _model_repository_query(request)
     items = _run_github_search("repositories", _model_repository_params(request))
     results = _normalize_repository_results(items)
-    logger.info(
+    logger.debug(
         "github_search_model_repositories called",
         extra={"query": request.query, "resolved_query": resolved_query},
     )
@@ -297,10 +328,15 @@ def github_search_model_repositories(
 
 @mcp.tool()
 def github_search_code(query: str, max_results: int = 5) -> GitHubCodeSearchResponse:
+    """Search GitHub code through the GitHub search API.
+
+    Use this tool for code search. Do not use MCP resources for GitHub code;
+    this server exposes code search as a tool.
+    """
     request = GitHubSearchRequest(query=query, max_results=max_results)
     items = _run_github_search("code", {"q": request.query, "per_page": request.max_results})
     results = _normalize_code_results(items)
-    logger.info("github_search_code called", extra={"query": request.query})
+    logger.debug("github_search_code called", extra={"query": request.query})
     return GitHubCodeSearchResponse(
         message=f"Returned {len(results)} GitHub code results",
         query=request.query,
@@ -313,10 +349,15 @@ def github_search_code(query: str, max_results: int = 5) -> GitHubCodeSearchResp
 def github_search_issues(
     query: str, max_results: int = 5, sort: str = "best-match"
 ) -> GitHubIssueSearchResponse:
+    """Search GitHub issues and pull requests through the GitHub search API.
+
+    Use this tool for issue discovery. Do not use MCP resources for GitHub
+    searches; this server exposes issue search as a tool.
+    """
     request = GitHubSearchRequest(query=query, max_results=max_results, sort=sort)
     items = _run_github_search("issues", _repository_params(request))
     results = _normalize_issue_results(items)
-    logger.info("github_search_issues called", extra={"query": request.query})
+    logger.debug("github_search_issues called", extra={"query": request.query})
     return GitHubIssueSearchResponse(
         message=f"Returned {len(results)} GitHub issues",
         query=request.query,
@@ -329,9 +370,14 @@ def github_search_issues(
 def github_trending_repositories(
     since: str = "daily", language: str | None = None, max_results: int = 15
 ) -> GitHubTrendingRepositoriesResponse:
+    """Read GitHub trending repositories.
+
+    Use this tool for GitHub trending lookups. Do not use MCP resources for
+    trending pages; this server exposes trending lookup as a tool.
+    """
     request = GitHubTrendingRequest(since=since, language=language, max_results=max_results)
     results = _fetch_trending_repositories(request)
-    logger.info(
+    logger.debug(
         "github_trending_repositories called",
         extra={"since": request.since, "language": request.language},
     )

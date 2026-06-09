@@ -219,9 +219,14 @@ def _response_from_transcript(
 
 @mcp.tool()
 def parse_video_url(url: str) -> VideoSourceResponse:
+    """Parse and canonicalize a video URL.
+
+    Use this tool for identifying video platform and ID. Do not use MCP
+    resources for video URLs; this server exposes video operations as tools.
+    """
     request = VideoUrlRequest(url=cast(Any, url))
     platform, video_id, canonical_url = _canonicalize_url(str(request.url))
-    logger.info("parse_video_url called", extra={"url": str(request.url), "platform": platform})
+    logger.debug("parse_video_url called", extra={"url": str(request.url), "platform": platform})
     return VideoSourceResponse(
         message="Parsed video URL successfully",
         url=request.url,
@@ -239,6 +244,11 @@ def summarize_video_transcript(
     max_points: int = 5,
     max_summary_sentences: int = 3,
 ) -> VideoSummaryResponse:
+    """Summarize a provided video transcript.
+
+    Use this tool when transcript text is already available. Do not use MCP
+    resources for transcript summarization.
+    """
     request = VideoSummaryRequest(
         transcript=transcript,
         url=cast(Any, url),
@@ -246,7 +256,7 @@ def summarize_video_transcript(
         max_points=max_points,
         max_summary_sentences=max_summary_sentences,
     )
-    logger.info(
+    logger.debug(
         "summarize_video_transcript called",
         extra={"url": str(request.url) if request.url else None, "title": request.title},
     )
@@ -268,6 +278,11 @@ def summarize_video_segments(
     max_summary_sentences: int = 3,
     chapter_window_seconds: int = 180,
 ) -> VideoSummaryResponse:
+    """Summarize timestamped video transcript segments.
+
+    Use this tool when transcript segments are already available. Do not use MCP
+    resources for video segment summarization.
+    """
     request = VideoSegmentSummaryRequest(
         segments=segments,
         url=cast(Any, url),
@@ -277,7 +292,7 @@ def summarize_video_segments(
         chapter_window_seconds=chapter_window_seconds,
     )
     transcript = " ".join(segment.text for segment in request.segments)
-    logger.info(
+    logger.debug(
         "summarize_video_segments called",
         extra={
             "url": str(request.url) if request.url else None,

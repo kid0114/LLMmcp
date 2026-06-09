@@ -115,9 +115,16 @@ def _should_fallback_to_brave(exc: SearchError) -> bool:
 async def search_web(
     query: str, max_results: int = 5, provider: str = "auto"
 ) -> SearchResponse:
+    """Search the web and return structured candidate pages.
+
+    This tool executes one web search query.
+    Use this tool for current web/news/search queries. Do not use
+    list_mcp_resources, list_mcp_resource_templates, or resources/read for
+    ordinary web search; this server exposes web search as a tool.
+    """
     request = SearchRequest(query=query, max_results=max_results, provider=provider)
     provider = _resolve_requested_provider(request.provider)
-    logger.info(
+    logger.debug(
         "search_web called",
         extra={
             "query": request.query,

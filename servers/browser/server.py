@@ -12,6 +12,7 @@ from shared.errors import BrowserError, PermissionDeniedError
 from shared.logging import get_logger
 from shared.permissions import validate_outbound_url
 from shared.settings import get_settings
+from shared.site_auth import MEDIUM_USER_AGENT, is_medium_url, medium_browser_cookies
 
 logger = get_logger(__name__)
 mcp = FastMCP(name="llmmcp-browser")
@@ -36,6 +37,11 @@ def _extract_page_content(html: str) -> tuple[str | None, str]:
 async def browser_fetch(
     url: str, timeout: int = 30, wait_until: str = "networkidle"
 ) -> BrowserResponse:
+    """Fetch JavaScript-rendered web pages with Playwright and extract readable content.
+
+    Use this tool for pages that need browser rendering, login cookies, or SPA execution.
+    Do not use resources/read for ordinary URLs; this server exposes browser actions as tools.
+    """
     settings = get_settings()
 
     try:
@@ -48,7 +54,7 @@ async def browser_fetch(
 
     timeout_ms = (request.timeout or settings.browser_timeout) * 1000
     screenshot_path = str(Path(gettempdir()) / "llmmcp_browser_preview.png")
-    logger.info(
+    logger.debug(
         "browser_fetch called",
         extra={
             "url": str(request.url),
@@ -60,7 +66,13 @@ async def browser_fetch(
     try:
         async with async_playwright() as playwright:
             browser = await playwright.chromium.launch(headless=settings.browser_headless)
-            page = await browser.new_page()
+            context_options = (
+                {"user_agent": MEDIUM_USER_AGENT} if is_medium_url(str(request.url)) else {}
+            )
+            context = await browser.new_context(**context_options)
+            if cookies := medium_browser_cookies(str(request.url)):
+                await context.add_cookies(cookies)
+            page = await context.new_page()
             response = await page.goto(
                 str(request.url),
                 wait_until=request.wait_until,
@@ -70,6 +82,7 @@ async def browser_fetch(
             html = await page.content()
             final_url = page.url
             page_title = await page.title()
+            await context.close()
             await browser.close()
     except PlaywrightError as exc:
         raise BrowserError(f"Playwright request failed: {exc}") from exc

@@ -285,13 +285,18 @@ def _extract_mixed_text(target: Path, mixed_kind: str) -> str:
 
 @mcp.tool()
 def classify_readable_file(path: str) -> FileClassificationResponse:
+    """Classify a local file and choose the appropriate reader tool.
+
+    Use this tool for local file inspection within LOCAL_FILE_ROOT. Do not use
+    resources/read for arbitrary local paths; this server exposes file access as tools.
+    """
     request = FileReaderPathRequest(path=path)
     root = _resolve_local_root()
     target = _resolve_safe_path(request.path, root)
     _require_file(target)
 
     classification = _classify_file(target)
-    logger.info("classify_readable_file called", extra={"path": request.path})
+    logger.debug("classify_readable_file called", extra={"path": request.path})
     return FileClassificationResponse(
         message="Classified readable file successfully",
         path=request.path,
@@ -310,6 +315,11 @@ def classify_readable_file(path: str) -> FileClassificationResponse:
 
 @mcp.tool()
 def read_text_file(path: str, max_chars: int = 20000, offset: int = 0) -> TextReadResponse:
+    """Read a plain or mixed text local file within LOCAL_FILE_ROOT.
+
+    Use this tool for local text files. Do not use resources/read for arbitrary
+    local paths; this server exposes file access as tools.
+    """
     request = TextReadRequest(path=path, max_chars=max_chars, offset=offset)
     root = _resolve_local_root()
     target = _resolve_safe_path(request.path, root)
@@ -321,7 +331,7 @@ def read_text_file(path: str, max_chars: int = 20000, offset: int = 0) -> TextRe
         )
 
     content, truncated = _read_text_slice(target, request.offset, request.max_chars)
-    logger.info("read_text_file called", extra={"path": request.path})
+    logger.debug("read_text_file called", extra={"path": request.path})
     return TextReadResponse(
         message="Read text file successfully",
         path=request.path,
@@ -341,6 +351,11 @@ def read_text_file(path: str, max_chars: int = 20000, offset: int = 0) -> TextRe
 def read_mixed_text_file(
     path: str, max_chars: int = 20000, offset: int = 0
 ) -> TextReadResponse:
+    """Extract readable text from mixed local files such as HTML, XML, SVG, or notebooks.
+
+    Use this tool after classify_readable_file identifies a mixed text file.
+    Do not use resources/read for arbitrary local paths.
+    """
     request = MixedTextReadRequest(path=path, max_chars=max_chars, offset=offset)
     root = _resolve_local_root()
     target = _resolve_safe_path(request.path, root)
@@ -352,7 +367,7 @@ def read_mixed_text_file(
     extracted = _extract_mixed_text(target, classification.mixed_kind)
     content = extracted[request.offset : request.offset + request.max_chars]
     truncated = request.offset + len(content) < len(extracted)
-    logger.info("read_mixed_text_file called", extra={"path": request.path})
+    logger.debug("read_mixed_text_file called", extra={"path": request.path})
     return TextReadResponse(
         message="Read mixed text file successfully",
         path=request.path,
@@ -446,6 +461,11 @@ def _ocr_with_tesseract(target: Path, language: str) -> str:
 
 @mcp.tool()
 def read_pdf_file(path: str, max_chars: int = 20000, max_pages: int = 20) -> PdfReadResponse:
+    """Read text from a local PDF file within LOCAL_FILE_ROOT.
+
+    Use this tool for PDF content extraction. Do not use resources/read for
+    arbitrary local PDF paths; this server exposes PDF reading as a tool.
+    """
     request = PdfReadRequest(path=path, max_chars=max_chars, max_pages=max_pages)
     root = _resolve_local_root()
     target = _resolve_safe_path(request.path, root)
@@ -473,7 +493,7 @@ def read_pdf_file(path: str, max_chars: int = 20000, max_pages: int = 20) -> Pdf
     if len(content) > request.max_chars:
         content = content[: request.max_chars]
 
-    logger.info("read_pdf_file called", extra={"path": request.path, "pages_read": pages_read})
+    logger.debug("read_pdf_file called", extra={"path": request.path, "pages_read": pages_read})
     return PdfReadResponse(
         message="Read PDF file successfully",
         path=request.path,
@@ -488,6 +508,11 @@ def read_pdf_file(path: str, max_chars: int = 20000, max_pages: int = 20) -> Pdf
 
 @mcp.tool()
 def inspect_image_file(path: str) -> ImageMetadataResponse:
+    """Inspect local image metadata within LOCAL_FILE_ROOT.
+
+    Use this tool for image dimensions, format, and metadata. Do not use
+    resources/read for arbitrary image paths.
+    """
     request = ImageMetadataRequest(path=path)
     root = _resolve_local_root()
     target = _resolve_safe_path(request.path, root)
@@ -505,7 +530,7 @@ def inspect_image_file(path: str) -> ImageMetadataResponse:
     except Exception as exc:
         raise FileReaderError(f"Failed to inspect image file: {exc}") from exc
 
-    logger.info("inspect_image_file called", extra={"path": request.path})
+    logger.debug("inspect_image_file called", extra={"path": request.path})
     return ImageMetadataResponse(
         message="Inspected image file successfully",
         path=request.path,
@@ -521,6 +546,11 @@ def inspect_image_file(path: str) -> ImageMetadataResponse:
 
 @mcp.tool()
 def ocr_image_file(path: str, language: str = "eng", max_chars: int = 20000) -> ImageOcrResponse:
+    """Run OCR on a local image file within LOCAL_FILE_ROOT.
+
+    Use this tool for extracting text from images. Do not use resources/read
+    for arbitrary image paths; this server exposes OCR as a tool.
+    """
     request = ImageOcrRequest(path=path, language=language, max_chars=max_chars)
     root = _resolve_local_root()
     target = _resolve_safe_path(request.path, root)
@@ -539,7 +569,7 @@ def ocr_image_file(path: str, language: str = "eng", max_chars: int = 20000) -> 
     if truncated:
         content = content[: request.max_chars]
 
-    logger.info(
+    logger.debug(
         "ocr_image_file called",
         extra={"path": request.path, "language": request.language, "backend": backend},
     )

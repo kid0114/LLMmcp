@@ -25,6 +25,7 @@ mcp = FastMCP(name="llmmcp-huggingface")
 HUGGINGFACE_MODELS_BASE = "https://huggingface.co/api/models"
 HUGGINGFACE_DATASETS_BASE = "https://huggingface.co/api/datasets"
 HUGGINGFACE_PAPERS_BASE = "https://huggingface.co/api/papers"
+HUGGINGFACE_SPACES_BASE = "https://huggingface.co/api/spaces"
 
 
 def _http_client() -> Client:
@@ -32,10 +33,15 @@ def _http_client() -> Client:
     return Client(timeout=Timeout(settings.http_timeout), follow_redirects=True)
 
 
-def _fetch_items(url: str, limit: int) -> list[dict[str, Any]]:
+def _fetch_items(
+    url: str, limit: int, params: dict[str, str | int] | None = None
+) -> list[dict[str, Any]]:
+    request_params: dict[str, str | int] = {"limit": limit}
+    if params:
+        request_params.update(params)
     try:
         with _http_client() as client:
-            response = client.get(url, params={"limit": limit})
+            response = client.get(url, params=request_params)
             response.raise_for_status()
     except HTTPError as exc:
         raise HuggingFaceError(f"Hugging Face request failed: {exc}") from exc
@@ -187,13 +193,51 @@ def _normalize_paper(item: dict[str, Any]) -> HuggingFaceResourceResult | None:
     )
 
 
-def _resource_items(resource_type: HuggingFaceResourceType) -> list[HuggingFaceResourceResult]:
+def _normalize_mcp_space(item: dict[str, Any]) -> HuggingFaceResourceResult | None:
+    space_id = item.get("id")
+    if not isinstance(space_id, str):
+        return None
+    tags = item.get("tags")
+    tag_values = [tag for tag in tags if isinstance(tag, str)] if isinstance(tags, list) else []
+    sdk = item.get("sdk")
+    if isinstance(sdk, str) and sdk:
+        tag_values.append(f"sdk:{sdk}")
+    return HuggingFaceResourceResult(
+        rank=0,
+        resource_type="mcp",
+        id=space_id,
+        title=space_id,
+        description=item.get("description"),
+        url=f"https://huggingface.co/spaces/{space_id}",
+        likes=item.get("likes") if isinstance(item.get("likes"), int) else None,
+        trending_score=item.get("trendingScore")
+        if isinstance(item.get("trendingScore"), int)
+        else None,
+        created_at=item.get("createdAt"),
+        updated_at=item.get("lastModified") or item.get("createdAt"),
+        tags=tag_values,
+    )
+
+
+def _is_mcp_space(result: HuggingFaceResourceResult) -> bool:
+    tag_text = " ".join(result.tags)
+    mcp_text = "\n".join([result.id, result.title, result.description or "", tag_text]).lower()
+    return "mcp" in mcp_text or "model context protocol" in mcp_text
+
+
+def _resource_items(
+    resource_type: HuggingFaceResourceType, query: str | None = None
+) -> list[HuggingFaceResourceResult]:
     if resource_type == "model":
         items = _fetch_items(HUGGINGFACE_MODELS_BASE, 100)
         return [item for raw in items if (item := _normalize_model(raw))]
     if resource_type == "dataset":
         items = _fetch_items(HUGGINGFACE_DATASETS_BASE, 100)
         return [item for raw in items if (item := _normalize_dataset(raw))]
+    if resource_type == "mcp":
+        params = {"search": query} if query else {"filter": "mcp"}
+        items = _fetch_items(HUGGINGFACE_SPACES_BASE, 100, params=params)
+        return [item for raw in items if (item := _normalize_mcp_space(raw))]
     items = _fetch_items(HUGGINGFACE_PAPERS_BASE, 100)
     return [item for raw in items if (item := _normalize_paper(raw))]
 
@@ -206,7 +250,11 @@ def _filter_results(
         if not _date_within_days(result.updated_at or result.created_at, request.days):
             continue
         tag_text = " ".join(result.tags)
-        if not _matches_query(request.query, result.title, result.description, tag_text):
+        if not _matches_query(
+            request.query, result.id, result.title, result.description, result.url, tag_text
+        ):
+            continue
+        if result.resource_type == "mcp" and not _is_mcp_space(result):
             continue
         filtered.append(result)
     return filtered
@@ -215,10 +263,10 @@ def _filter_results(
 def query_huggingface_trending_resources(
     request: HuggingFaceTrendingRequest,
 ) -> HuggingFaceTrendingResponse:
-    results = _resource_items(request.resource_type)
+    results = _resource_items(request.resource_type, request.query)
     results = _filter_results(request, results)
     results = _sort_results(results, request.sort)[: request.max_results]
-    logger.info(
+    logger.debug(
         "huggingface_trending_resources called",
         extra={
             "resource_type": request.resource_type,
@@ -266,6 +314,13 @@ def huggingface_trending_resources(
     period: str | None = None,
     days: int = 30,
 ) -> HuggingFaceTrendingResponse:
+    """Query trending Hugging Face resources.
+
+    For resource_type="mcp", results are MCP-enabled Spaces rather than a separate
+    MCP plaza. This tool executes one Hugging Face Spaces query.
+    Do not use MCP resources for Hugging Face queries; this server exposes
+    Hugging Face lookup as a tool.
+    """
     request = HuggingFaceTrendingRequest(
         resource_type=cast(HuggingFaceResourceType, resource_type),
         query=query,
