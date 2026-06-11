@@ -16,11 +16,26 @@ from servers.huggingface.schemas import (
     HuggingFaceTrendingResponse,
 )
 from shared.errors import HuggingFaceError
+from shared.http_headers import browser_like_headers
 from shared.logging import get_logger
 from shared.settings import get_settings
 
 logger = get_logger(__name__)
 mcp = FastMCP(name="llmmcp-huggingface")
+
+@mcp.resource("llmmcp://huggingface/help")
+def huggingface_help_resource() -> str:
+    """Static help resource for clients that list resources before tools."""
+    return (
+        "llmmcp-huggingface is primarily a tool-based MCP server.\n\n"
+        "Preferred tools:\n"
+        "- huggingface_trending_resources\n\n"
+        "Use these tools for Hugging Face resource lookups. Do not use resources/read for ordinary "
+        "tool tasks unless this server explicitly advertises a matching resource "
+        "template. Empty or minimal MCP resources do not mean the tools are "
+        "unavailable."
+    )
+
 
 HUGGINGFACE_MODELS_BASE = "https://huggingface.co/api/models"
 HUGGINGFACE_DATASETS_BASE = "https://huggingface.co/api/datasets"
@@ -30,7 +45,11 @@ HUGGINGFACE_SPACES_BASE = "https://huggingface.co/api/spaces"
 
 def _http_client() -> Client:
     settings = get_settings()
-    return Client(timeout=Timeout(settings.http_timeout), follow_redirects=True)
+    return Client(
+        timeout=Timeout(settings.http_timeout),
+        follow_redirects=True,
+        headers=browser_like_headers({"Accept": "application/json"}),
+    )
 
 
 def _fetch_items(

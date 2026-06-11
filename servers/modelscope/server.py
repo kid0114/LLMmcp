@@ -22,11 +22,26 @@ from servers.modelscope.schemas import (
     ModelScopeTrendingResponse,
 )
 from shared.errors import ModelScopeError
+from shared.http_headers import browser_like_headers
 from shared.logging import get_logger
 from shared.settings import get_settings
 
 logger = get_logger(__name__)
 mcp = FastMCP(name="llmmcp-modelscope")
+
+@mcp.resource("llmmcp://modelscope/help")
+def modelscope_help_resource() -> str:
+    """Static help resource for clients that list resources before tools."""
+    return (
+        "llmmcp-modelscope is primarily a tool-based MCP server.\n\n"
+        "Preferred tools:\n"
+        "- modelscope_trending_resources\n\n"
+        "Use these tools for ModelScope resource lookups. Do not use resources/read for ordinary "
+        "tool tasks unless this server explicitly advertises a matching resource "
+        "template. Empty or minimal MCP resources do not mean the tools are "
+        "unavailable."
+    )
+
 
 MODELSCOPE_SKILLS_BASE = "https://modelscope.cn/openapi/v1/skills"
 MODELSCOPE_DATASETS_BASE = "https://modelscope.cn/openapi/v1/datasets"
@@ -37,7 +52,11 @@ MODELSCOPE_MCP_SERVERS_BASE = "https://modelscope.cn/api/v1/dolphin/mcpServers"
 
 def _http_client() -> Client:
     settings = get_settings()
-    return Client(timeout=Timeout(settings.http_timeout), follow_redirects=True)
+    return Client(
+        timeout=Timeout(settings.http_timeout),
+        follow_redirects=True,
+        headers=browser_like_headers(),
+    )
 
 
 def _require_json(response: Any) -> dict[str, Any]:
@@ -378,39 +397,41 @@ def _fetch_mcp_items(query: str | None = None) -> list[dict[str, Any]]:
     payload = {"PageSize": 100, "PageNumber": 1, "Query": query or "", "Criterion": []}
     cookie = os.getenv("MODELSCOPE_MCP_COOKIE")
     csrf_token = os.getenv("MODELSCOPE_MCP_CSRF_TOKEN") or _cookie_value(cookie, "csrf_token")
-    headers = {
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Encoding": "gzip, deflate, br, zstd",
-        "Accept-Language": os.getenv(
-            "MODELSCOPE_MCP_ACCEPT_LANGUAGE",
-            "en-GB,en-US;q=0.9,en;q=0.8",
-        ),
-        "Cache-Control": "no-cache",
-        "Content-Type": "application/json",
-        "Referer": "https://modelscope.cn/mcp",
-        "Origin": "https://modelscope.cn",
-        "Pragma": "no-cache",
-        "Sec-Fetch-Dest": "empty",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Site": "same-origin",
-        "User-Agent": os.getenv(
-            "MODELSCOPE_MCP_USER_AGENT",
-            (
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/148.0.0.0 Safari/537.36"
+    headers = browser_like_headers(
+        {
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Accept-Language": os.getenv(
+                "MODELSCOPE_MCP_ACCEPT_LANGUAGE",
+                "en-GB,en-US;q=0.9,en;q=0.8",
             ),
-        ),
-        "sec-ch-ua": os.getenv(
-            "MODELSCOPE_MCP_SEC_CH_UA",
-            '"Chromium";v="148", "Google Chrome";v="148", "Not/A)Brand";v="99"',
-        ),
-        "sec-ch-ua-mobile": "?0",
-        "sec-ch-ua-platform": '"macOS"',
-        "x-modelscope-accept-language": os.getenv("MODELSCOPE_ACCEPT_LANGUAGE", "zh_CN"),
-        "X-Modelscope-Trace-Id": str(uuid.uuid4()),
-        "X-Requested-With": "XMLHttpRequest",
-    }
+            "Cache-Control": "no-cache",
+            "Content-Type": "application/json",
+            "Referer": "https://modelscope.cn/mcp",
+            "Origin": "https://modelscope.cn",
+            "Pragma": "no-cache",
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-origin",
+            "User-Agent": os.getenv(
+                "MODELSCOPE_MCP_USER_AGENT",
+                (
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/148.0.0.0 Safari/537.36"
+                ),
+            ),
+            "sec-ch-ua": os.getenv(
+                "MODELSCOPE_MCP_SEC_CH_UA",
+                '"Chromium";v="148", "Google Chrome";v="148", "Not/A)Brand";v="99"',
+            ),
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": '"macOS"',
+            "x-modelscope-accept-language": os.getenv("MODELSCOPE_ACCEPT_LANGUAGE", "zh_CN"),
+            "X-Modelscope-Trace-Id": str(uuid.uuid4()),
+            "X-Requested-With": "XMLHttpRequest",
+        }
+    )
     if csrf_token:
         headers["X-CSRF-TOKEN"] = csrf_token
     if cookie:

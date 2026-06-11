@@ -20,11 +20,27 @@ from servers.github_search.schemas import (
     GitHubTrendingRequest,
 )
 from shared.errors import GitHubSearchError
+from shared.http_headers import browser_like_headers
 from shared.logging import get_logger
 from shared.settings import get_settings
 
 logger = get_logger(__name__)
 mcp = FastMCP(name="llmmcp-github-search")
+
+@mcp.resource("llmmcp://github-search/help")
+def github_search_help_resource() -> str:
+    """Static help resource for clients that list resources before tools."""
+    return (
+        "llmmcp-github-search is primarily a tool-based MCP server.\n\n"
+        "Preferred tools:\n"
+        "- github_search_repositories, github_search_code, github_search_issues\n\n"
+        "Use these tools for GitHub search and trending lookups. "
+        "Do not use resources/read for ordinary "
+        "tool tasks unless this server explicitly advertises a matching resource "
+        "template. Empty or minimal MCP resources do not mean the tools are "
+        "unavailable."
+    )
+
 
 GITHUB_API_BASE = "https://api.github.com/search"
 GITHUB_TRENDING_BASE = "https://github.com/trending"
@@ -32,10 +48,12 @@ GITHUB_TRENDING_BASE = "https://github.com/trending"
 
 def _github_headers() -> dict[str, str]:
     settings = get_settings()
-    headers = {
-        "Accept": "application/vnd.github+json",
-        "User-Agent": "llmmcp-github-search",
-    }
+    headers = browser_like_headers(
+        {
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "llmmcp-github-search",
+        }
+    )
     if settings.github_token:
         headers["Authorization"] = f"Bearer {settings.github_token}"
     return headers
@@ -259,7 +277,7 @@ def _fetch_trending_repositories(
         with Client(timeout=Timeout(settings.http_timeout), follow_redirects=True) as client:
             response = client.get(
                 _trending_url(request),
-                headers={"User-Agent": "llmmcp-github-search"},
+                headers=browser_like_headers({"User-Agent": "llmmcp-github-search"}),
             )
             response.raise_for_status()
     except HTTPError as exc:

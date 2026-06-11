@@ -7,11 +7,26 @@ from mcp.server.fastmcp import FastMCP
 
 from servers.search.schemas import SearchRequest, SearchResponse, SearchResult
 from shared.errors import SearchError
+from shared.http_headers import browser_like_headers
 from shared.logging import get_logger
 from shared.settings import get_settings
 
 logger = get_logger(__name__)
 mcp = FastMCP(name="llmmcp-search")
+
+@mcp.resource("llmmcp://search/help")
+def search_help_resource() -> str:
+    """Static help resource for clients that list resources before tools."""
+    return (
+        "llmmcp-search is primarily a tool-based MCP server.\n\n"
+        "Preferred tools:\n"
+        "- search_web\n\n"
+        "Use these tools for web search queries. Do not use resources/read for ordinary "
+        "tool tasks unless this server explicitly advertises a matching resource "
+        "template. Empty or minimal MCP resources do not mean the tools are "
+        "unavailable."
+    )
+
 
 BRAVE_SEARCH_URL = "https://api.search.brave.com/res/v1/web/search"
 
@@ -65,10 +80,12 @@ async def _search_with_brave(query: str, max_results: int) -> list[SearchResult]
         raise SearchError("BRAVE_API_KEY is required when SEARCH_PROVIDER=brave")
 
     params = {"q": query, "count": max_results}
-    headers = {
-        "Accept": "application/json",
-        "X-Subscription-Token": settings.brave_api_key,
-    }
+    headers = browser_like_headers(
+        {
+            "Accept": "application/json",
+            "X-Subscription-Token": settings.brave_api_key,
+        }
+    )
 
     try:
         async with AsyncClient(timeout=Timeout(settings.http_timeout)) as client:

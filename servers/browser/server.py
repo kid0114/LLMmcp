@@ -9,13 +9,29 @@ from trafilatura import extract
 
 from servers.browser.schemas import BrowserRequest, BrowserResponse
 from shared.errors import BrowserError, PermissionDeniedError
+from shared.http_headers import browser_context_options
 from shared.logging import get_logger
 from shared.permissions import validate_outbound_url
 from shared.settings import get_settings
-from shared.site_auth import MEDIUM_USER_AGENT, is_medium_url, medium_browser_cookies
+from shared.site_auth import medium_browser_cookies, site_specific_headers
 
 logger = get_logger(__name__)
 mcp = FastMCP(name="llmmcp-browser")
+
+@mcp.resource("llmmcp://browser/help")
+def browser_help_resource() -> str:
+    """Static help resource for clients that list resources before tools."""
+    return (
+        "llmmcp-browser is primarily a tool-based MCP server.\n\n"
+        "Preferred tools:\n"
+        "- browser_fetch\n\n"
+        "Use these tools for JavaScript-rendered page fetches. "
+        "Do not use resources/read for ordinary "
+        "tool tasks unless this server explicitly advertises a matching resource "
+        "template. Empty or minimal MCP resources do not mean the tools are "
+        "unavailable."
+    )
+
 
 
 def _extract_page_content(html: str) -> tuple[str | None, str]:
@@ -66,10 +82,20 @@ async def browser_fetch(
     try:
         async with async_playwright() as playwright:
             browser = await playwright.chromium.launch(headless=settings.browser_headless)
-            context_options = (
-                {"user_agent": MEDIUM_USER_AGENT} if is_medium_url(str(request.url)) else {}
-            )
-            context = await browser.new_context(**context_options)
+            options = browser_context_options()
+            specific_headers = site_specific_headers(str(request.url))
+            headers = {
+                **dict(options["extra_http_headers"]),
+                **{
+                    key: value
+                    for key, value in specific_headers.items()
+                    if key not in {"User-Agent", "Cookie"}
+                },
+            }
+            options["extra_http_headers"] = headers
+            if user_agent := specific_headers.get("User-Agent"):
+                options["user_agent"] = user_agent
+            context = await browser.new_context(**options)
             if cookies := medium_browser_cookies(str(request.url)):
                 await context.add_cookies(cookies)
             page = await context.new_page()

@@ -6,13 +6,16 @@
   - async search_web
   - Brave Search 使用 async HTTP
   - DDGS 同步库使用 asyncio.to_thread 隔离
+  - 已实现：Brave / HTTP 搜索请求接入通用浏览器风格 header
 - fetch MCP
   - async fetch_url
   - 使用 httpx.AsyncClient
+  - 已实现：fetch_url 接入通用浏览器风格 header，并允许站点专用 header 覆盖默认值
 - browser MCP
   - async browser_fetch
   - 使用 Playwright Async API
   - status_code 字段区分 HTTP 状态和响应状态
+  - 已实现：browser_fetch 接入通用浏览器风格 header，并保留 Medium cookie 注入
 - 基础配置
 - 基础测试
 - 异步适配
@@ -37,6 +40,7 @@
   - github_search_code
   - github_search_issues
   - github_trending_repositories
+  - 已实现：GitHub API / Trending 请求接入通用浏览器风格 header
   - 待补：server 行为测试覆盖
   - 待补：OpenAI-style tools 导出
 
@@ -66,18 +70,27 @@
   - 待补：OpenAI-style tools 导出
 - modelscope MCP
   - modelscope_trending_resources
-  - 当前支持 skill / dataset / model / paper
+  - 当前支持 skill / dataset / model / paper / mcp
   - period / days 支持 today、week、10d、14d、month
   - skill / dataset / model 走 openapi/v1
   - paper 走 api/v1/papers
-  - 待补：MCP 广场真实数据接口定位后纳入 resource_type=mcp
+  - mcp 按浏览器抓包走 PUT api/v1/dolphin/mcpServers，映射 ViewCount / Stars / CallVolume 等公开信号
+  - 已实现：ModelScope 公开 API / MCP 广场请求接入通用浏览器风格 header
+  - 已实现：mcp 关键词搜索透传到 ModelScope 服务端 Query
+  - 已实现：mcp 本地二次过滤匹配 id / title / description / url / tags，支持按具体 MCP 名称或包 ID 搜索
+  - 已实现：MODELSCOPE_MCP_COOKIE / MODELSCOPE_MCP_CSRF_TOKEN / browser-like headers 支持，用于访问受 WAF 保护的 MCP 广场接口
+  - 已验证：无 cookie 情况下 MCP 广场列表、关键词搜索和指定 MCP ID 搜索可返回结果
+  - 待补：ModelScope MCP 广场接口 WAF challenge 的自动稳定处理
 - huggingface MCP
   - huggingface_trending_resources
-  - 当前支持 paper / model / dataset
+  - 当前支持 paper / model / dataset / mcp
   - period / days 支持 today、week、10d、14d、month
   - paper 走 api/papers
   - model 走 api/models
   - dataset 走 api/datasets
+  - mcp 走 api/spaces，返回带 MCP / Model Context Protocol 语义的 Spaces
+  - 已实现：Hugging Face API 请求接入通用浏览器风格 header
+  - 已实现：mcp query 透传到 Hugging Face Spaces search，并本地过滤 id / title / description / url / tags
 - paper_reader MCP
   - read_paper
   - read_paper_sections
