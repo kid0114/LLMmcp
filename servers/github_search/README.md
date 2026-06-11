@@ -121,6 +121,8 @@ monthly 趋势仓库。该功能免费且不需要 `GITHUB_TOKEN`，但依赖 Gi
 
 - `GITHUB_TOKEN` 可选，不配置也能使用 GitHub API，但匿名限流更严格。
 - Trending 抓 GitHub 网页，不需要 token。
+- GitHub API 和 Trending 请求都会先使用通用浏览器风格 header，再叠加 GitHub 自己的 `Accept` / token 头。
+- 如果 GitHub Search API 返回 rate limit，优先配置 `GITHUB_TOKEN`；不要把 `browser_fetch` 当作通用替代，除非用户明确要查看某个具体 GitHub 页面。
 - 当前工具全部是只读能力，不创建 issue、不评论、不 push、不修改仓库。
 
 ## Phase 2 待补工具

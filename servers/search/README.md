@@ -29,6 +29,7 @@
 - `provider="ddgs"` 使用 DuckDuckGo / ddgs。
 - `provider="brave"` 使用 Brave Search，需要 `BRAVE_API_KEY`。
 - `provider="auto"` 会读取 `SEARCH_PROVIDER` 环境变量，再按当前回退策略执行。
+- Brave Search 请求会使用通用浏览器风格 header，避免裸请求特征过强。
 - 适合先找候选页面，再交给 `fetch_url` 或 `browser_fetch` 读取正文。
 
 ## 配置
