@@ -28,6 +28,7 @@
 
 - 适合读取需要 JavaScript 渲染、SPA、普通抓取拿不到正文的页面。
 - `browser_fetch` 的 Playwright context 会复用通用浏览器风格 header；Medium URL 仍会注入本地 `MEDIUM_COOKIE`。
+- 如果 `load` 或 `networkidle` 等待超时，`browser_fetch` 会自动回退到 `domcontentloaded` 再试一次。
 - 成本比 `fetch_url` 更高，会占用本机 CPU/内存。
 - 出站 URL 会经过权限检查，默认阻止 localhost、私有地址和非 HTTP/HTTPS scheme。
 - 如果配置了 `ALLOWLIST_DOMAINS`，只允许访问白名单域名。

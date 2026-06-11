@@ -76,3 +76,83 @@ async def test_browser_fetch_sets_basic_browser_headers(monkeypatch: pytest.Monk
     assert response.status_code == 200
     assert response.title == "Example"
     assert "Hello" in response.content
+
+
+@pytest.mark.anyio
+async def test_browser_fetch_retries_timeout_with_domcontentloaded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {"goto_calls": []}
+
+    class FakePage:
+        def __init__(self) -> None:
+            self.url = "https://example.com/"
+            self._calls = 0
+
+        async def goto(self, url: str, wait_until: str, timeout: int):
+            calls = captured["goto_calls"]
+            assert isinstance(calls, list)
+            calls.append({"url": url, "wait_until": wait_until, "timeout": timeout})
+            self._calls += 1
+            if self._calls == 1:
+                raise server.PlaywrightError("Page.goto: Timeout 15000ms exceeded.")
+            return SimpleNamespace(status=200)
+
+        async def screenshot(self, path: str, full_page: bool) -> None:
+            captured["screenshot"] = {"path": path, "full_page": full_page}
+
+        async def content(self) -> str:
+            return "<html><head><title>Example</title></head><body>Hello</body></html>"
+
+        async def title(self) -> str:
+            return "Example"
+
+    class FakeContext:
+        async def new_page(self) -> FakePage:
+            return FakePage()
+
+        async def close(self) -> None:
+            return None
+
+    class FakeBrowser:
+        async def new_context(self, **kwargs):
+            captured["context"] = kwargs
+            return FakeContext()
+
+        async def close(self) -> None:
+            return None
+
+    class FakeChromium:
+        async def launch(self, headless: bool) -> FakeBrowser:
+            captured["headless"] = headless
+            return FakeBrowser()
+
+    class FakePlaywright:
+        chromium = FakeChromium()
+
+        async def __aenter__(self) -> "FakePlaywright":
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    monkeypatch.setattr(server, "async_playwright", lambda: FakePlaywright())
+
+    response = await server.browser_fetch(
+        url="https://example.com",
+        timeout=5,
+        wait_until="load",
+    )
+
+    assert captured["headless"] is True
+    assert captured["goto_calls"] == [
+        {"url": "https://example.com/", "wait_until": "load", "timeout": 5000},
+        {
+            "url": "https://example.com/",
+            "wait_until": "domcontentloaded",
+            "timeout": 5000,
+        },
+    ]
+    assert response.status_code == 200
+    assert response.title == "Example"
+    assert "Hello" in response.content

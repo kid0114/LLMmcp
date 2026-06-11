@@ -49,6 +49,23 @@ def _extract_page_content(html: str) -> tuple[str | None, str]:
     return title, cleaned
 
 
+def _is_playwright_timeout(exc: PlaywrightError) -> bool:
+    return "Timeout" in str(exc) or "timeout" in str(exc)
+
+
+async def _goto_with_fallback(page, url: str, wait_until: str, timeout_ms: int):
+    try:
+        return await page.goto(url, wait_until=wait_until, timeout=timeout_ms)
+    except PlaywrightError as exc:
+        if wait_until != "domcontentloaded" and _is_playwright_timeout(exc):
+            logger.debug(
+                "browser_fetch retrying with domcontentloaded",
+                extra={"url": url, "wait_until": wait_until, "timeout_ms": timeout_ms},
+            )
+            return await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+        raise
+
+
 @mcp.tool()
 async def browser_fetch(
     url: str, timeout: int = 30, wait_until: str = "networkidle"
@@ -99,10 +116,11 @@ async def browser_fetch(
             if cookies := medium_browser_cookies(str(request.url)):
                 await context.add_cookies(cookies)
             page = await context.new_page()
-            response = await page.goto(
+            response = await _goto_with_fallback(
+                page,
                 str(request.url),
-                wait_until=request.wait_until,
-                timeout=timeout_ms,
+                request.wait_until,
+                timeout_ms,
             )
             await page.screenshot(path=screenshot_path, full_page=False)
             html = await page.content()
